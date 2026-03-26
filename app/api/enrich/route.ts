@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from "next/server"
 import { detectContentType } from "@/lib/detect-content-type"
 
+// Detect script/language from Unicode character ranges — deterministic, not AI-guessed
+function detectScript(text: string): string {
+  if (/[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF]/.test(text)) return "Arabic"
+  if (/[\u0590-\u05FF]/.test(text))                             return "Hebrew"
+  if (/[\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF]/.test(text)) return "Chinese, Japanese, or Korean"
+  if (/[\u0400-\u04FF]/.test(text))                             return "Russian"
+  if (/[\u0900-\u097F]/.test(text))                             return "Hindi"
+  return "English"
+}
+
 const TRUTH_DEPENDENT_TYPES = new Set([
   "claim",
   "question",
@@ -17,10 +27,10 @@ const SYSTEM_PROMPT = `You are a sharp research partner embedded in a thinking t
 Add a concise annotation that augments the note — not a summary. Surface what the user likely doesn't know yet: a counter-argument, a relevant framework, a key tension, an adjacent concept, or a logical implication.
 
 ## Language — CRITICAL
-Detect the language from the <note_to_enrich> text ONLY. Ignore the language of any <note> context items — they may be in a different language.
-- The "annotation" field MUST be written in the same language as the <note_to_enrich> text.
-- The "category" field MUST also be in the same language as the <note_to_enrich> text (e.g. if the note is in Arabic, use an Arabic category word).
-- Never default to English unless the <note_to_enrich> text itself is in English.
+The user message includes a [RESPOND IN: X] directive immediately before the note. You MUST write both "annotation" and "category" in that language, regardless of the language used in any context <note> items. Context notes may be in a completely different language — ignore their language entirely.
+- "annotation" → same language as the directive
+- "category" → same language as the directive (a single word or short phrase)
+- Never override the directive based on context note languages
 
 ## Annotation Rules
 - **2–4 sentences maximum.** Be direct. Cut anything that restates the note.
@@ -133,7 +143,9 @@ You have live web access. For this note type, include 1–2 real source citation
       : ""
 
     const safeText = text.replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    const userMessage = `<note_to_enrich>${safeText}</note_to_enrich>${categoryContext}${forcedTypeContext}${globalContext}`
+    const language = detectScript(text)
+    const langDirective = `[RESPOND IN: ${language}]\n`
+    const userMessage = `${langDirective}<note_to_enrich>${safeText}</note_to_enrich>${categoryContext}${forcedTypeContext}${globalContext}`
 
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
       method: "POST",
