@@ -47,7 +47,7 @@ const nextConfig = {
               "default-src 'self'",
               "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cloud.umami.is",
               "style-src 'self' 'unsafe-inline'",
-              "connect-src 'self' https://openrouter.ai https://cloud.umami.is",
+              "connect-src 'self' https://openrouter.ai https://cloud.umami.is https://api-gateway.umami.dev",
               "img-src 'self' data: blob:",
               "font-src 'self' data:",
               "frame-ancestors 'none'",

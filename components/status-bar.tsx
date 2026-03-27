@@ -155,7 +155,7 @@ export function StatusBar({
               {modelLabel}
             </span>
           )}
-          <span className="font-mono text-[10px] text-muted-foreground tabular-nums">
+          <span className="font-mono text-[10px] text-muted-foreground tabular-nums" suppressHydrationWarning>
             {time}
           </span>
           {/* Ghost panel toggle with badge */}
