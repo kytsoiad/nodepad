@@ -599,14 +599,19 @@ export default function Page() {
 
       const newId = generateId()
 
-      // Run heuristic client-side so the tile shows the right type immediately
-      // (instead of flashing "general" while the API is in flight).
-      // For syntactically unambiguous types, also treat as forcedType so the
-      // AI cannot override them during enrichment.
+      // Types where the heuristic is syntactically unambiguous — the AI is also
+      // sent forcedType so it won't reclassify them.  We can show these types
+      // immediately because they will never change after enrichment.
       const heuristicType = resolvedType ?? detectContentType(resolvedText)
       const HIGH_CONFIDENCE_TYPES = new Set<ContentType>(["question", "reference", "quote", "task"])
       const enrichForcedType = resolvedType
         ?? (HIGH_CONFIDENCE_TYPES.has(heuristicType) ? heuristicType : undefined)
+
+      // For ambiguous types (claim, idea, reflection, …) the AI may return a
+      // different classification, so start as "general" during enrichment to
+      // avoid a jarring double-classification jump in the UI.
+      const initialDisplayType: ContentType = resolvedType
+        ?? (HIGH_CONFIDENCE_TYPES.has(heuristicType) ? heuristicType : "general")
 
       pushHistory(activeProjectId, blocks)
       updateActiveProject(p => ({
@@ -615,7 +620,7 @@ export default function Page() {
           id: newId,
           text: resolvedText,
           timestamp: Date.now(),
-          contentType: heuristicType,
+          contentType: initialDisplayType,
           isEnriching: true,
         }]
       }))
