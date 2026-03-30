@@ -95,12 +95,12 @@ export function AboutPanel({ open, onClose }: AboutPanelProps) {
                 Saleh Kayyali
               </a>
             </span>
-            <a
-              href="mailto:mskayyali@me.com?subject=nodepad%20feedback"
-              className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-widest text-primary/60 hover:text-primary border border-primary/25 hover:border-primary/50 px-2 py-0.5 rounded-sm transition-colors"
+            <button
+              onClick={() => { window.location.href = "mailto:mskayyali@me.com?subject=nodepad%20feedback" }}
+              className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-widest text-primary/60 hover:text-primary border border-primary/25 hover:border-primary/50 px-2 py-0.5 rounded-sm transition-colors cursor-pointer"
             >
               Submit Feedback
-            </a>
+            </button>
           </p>
           <p className="mt-1.5 text-xs text-muted-foreground/35">
             This app uses anonymous analytics (Umami) to track feature interactions — views switched, exports, synthesis events. No note content, no personal data, no cross-site tracking.
@@ -273,8 +273,8 @@ export function AboutPanel({ open, onClose }: AboutPanelProps) {
               {[
                 "Write in fragments — nodepad handles the structure. You don't need to write in full sentences.",
                 "Mix types freely. A canvas with claims, questions, and quotes is richer than one with only one type.",
-                `Switch to Graph view (${mod}3) to understand which nodes are central to your thinking and which are peripheral.`,
-                `The canvas index (${mod}I) groups nodes by category — hovering a title in the index highlights the matching node in any view.`,
+                "Switch to Graph view (via ⌘K → Graph) to understand which nodes are central to your thinking and which are peripheral.",
+                "The canvas index (⌘K → Index) groups nodes by category — hovering a title in the index highlights the matching node in any view.",
                 "Pin important nodes with the pin icon in Tiling view so they stand out visually.",
                 "Tasks added to the canvas become a sub-task list — add sub-tasks by nesting them in the tile.",
                 "Use multiple projects (sidebar) to keep separate research threads isolated.",
