@@ -24,13 +24,21 @@ export function proxy(req: NextRequest) {
     return NextResponse.next()
   }
 
-  // Origin check — block requests from other origins
+  // Origin check — block requests from other origins.
+  // Use strict URL parsing rather than substring matching to prevent
+  // bypasses like https://evil.com?nodepad.space passing the check.
   const origin  = req.headers.get("origin")  ?? ""
   const referer = req.headers.get("referer") ?? ""
-  const host    = req.headers.get("host")    ?? ""
+  const host    = (req.headers.get("host") ?? "").split(":")[0] // strip port
 
-  const isLocalhost  = origin.includes("localhost") || referer.includes("localhost")
-  const isSameOrigin = origin.includes(host) || referer.includes(host)
+  function strictHostMatch(headerValue: string): boolean {
+    try { return new URL(headerValue).hostname === host } catch { return false }
+  }
+
+  const isLocalhost  = strictHostMatch(origin || referer)
+    ? ["localhost", "127.0.0.1"].includes(new URL(origin || referer).hostname)
+    : (origin + referer).includes("localhost")
+  const isSameOrigin = strictHostMatch(origin) || strictHostMatch(referer)
 
   if (origin && !isLocalhost && !isSameOrigin) {
     return new NextResponse(JSON.stringify({ error: "Forbidden" }), {
