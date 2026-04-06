@@ -18,7 +18,6 @@ import {
   EyeOff,
   Save,
   FolderInput,
-  Link,
 } from "lucide-react"
 import {
   AI_PROVIDER_PRESETS,
@@ -115,7 +114,6 @@ export function ProjectSidebar({
   const currentPreset = getPreset(draft.provider)
   const models = getModelsForProvider(draft.provider)
   const selectedModel = models.find(m => m.id === draft.modelId) || models[0] || undefined
-  const isCustomProvider = draft.provider === "custom"
 
   return (
     <div
@@ -309,8 +307,8 @@ export function ProjectSidebar({
                                   ...d,
                                   provider: preset.id,
                                   modelId: newModels[0]?.id ?? d.modelId,
-                                  webGrounding: preset.id === "openrouter" ? d.webGrounding : false,
-                                  customBaseUrl: preset.id === "zai" ? (d.customBaseUrl || preset.baseUrl) : preset.id === "custom" ? d.customBaseUrl : "",
+                                  webGrounding: d.webGrounding,
+                                  customBaseUrl: "",
                                 }))
                                 setProviderOpen(false)
                               }}
@@ -330,30 +328,6 @@ export function ProjectSidebar({
                   </div>
                 </div>
 
-                {/* Custom Base URL */}
-                {(isCustomProvider || draft.provider === "zai") && (
-                  <div className="flex flex-col gap-2">
-                    <label className="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
-                      Base URL
-                    </label>
-                    <div className="flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.04] px-2.5 py-2 focus-within:border-primary/50 transition-colors">
-                      <Link className="h-3 w-3 shrink-0 text-muted-foreground" />
-                      <input
-                        type="url"
-                        value={draft.customBaseUrl}
-                        onChange={e => setDraft(d => ({ ...d, customBaseUrl: e.target.value }))}
-                        placeholder="https://api.example.com/v1"
-                        className="flex-1 bg-transparent font-mono text-[11px] text-foreground outline-none placeholder:text-muted-foreground/40"
-                        autoComplete="off"
-                        spellCheck={false}
-                      />
-                    </div>
-                    <p className="font-mono text-[9px] text-muted-foreground leading-relaxed">
-                      Must be OpenAI-compatible (supports /chat/completions).
-                    </p>
-                  </div>
-                )}
-
                 {/* API Key */}
                 <div className="flex flex-col gap-2">
                   <label className="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
@@ -367,7 +341,9 @@ export function ProjectSidebar({
                       onChange={e => setDraft(d => ({ ...d, apiKey: e.target.value }))}
                       placeholder={currentPreset.keyPlaceholder || "Your API key"}
                       className="flex-1 bg-transparent font-mono text-[11px] text-foreground outline-none placeholder:text-muted-foreground/40"
-                      autoComplete="off"
+                      autoComplete="new-password"
+                      data-lpignore="true"
+                      data-1p-ignore="true"
                       spellCheck={false}
                     />
                     <button onClick={() => setShowKey(v => !v)} className="text-muted-foreground hover:text-foreground transition-colors">
@@ -390,7 +366,7 @@ export function ProjectSidebar({
                   <label className="font-mono text-[9px] font-bold uppercase tracking-[0.2em] text-muted-foreground">
                     Model
                   </label>
-                  {isCustomProvider || models.length === 0 ? (
+                  {models.length === 0 ? (
                     <div className="flex items-center gap-2 rounded-md border border-white/10 bg-white/[0.04] px-2.5 py-2 focus-within:border-primary/50 transition-colors">
                       <input
                         type="text"
@@ -441,7 +417,7 @@ export function ProjectSidebar({
                                   <div className="font-mono text-[10px] font-bold text-foreground">{model.label}</div>
                                   <div className="font-mono text-[9px] text-muted-foreground">{model.description}</div>
                                 </div>
-                                {model.supportsGrounding && draft.provider === "openrouter" && <Globe className="ml-auto h-3 w-3 shrink-0 text-primary/50" />}
+                                {model.supportsGrounding && (draft.provider === "openrouter" || draft.provider === "openai") && <Globe className="ml-auto h-3 w-3 shrink-0 text-primary/50" />}
                               </button>
                             ))}
                           </motion.div>
@@ -451,15 +427,19 @@ export function ProjectSidebar({
                   )}
                 </div>
 
-                {/* Web Grounding (only for OpenRouter) */}
-                {draft.provider === "openrouter" && selectedModel && (
+                {/* Web Grounding (OpenRouter + OpenAI) */}
+                {(draft.provider === "openrouter" || draft.provider === "openai") && selectedModel && (
                   <div className="flex items-start justify-between gap-3 rounded-md border border-white/5 bg-white/[0.02] px-2.5 py-2.5">
                     <div className="flex items-start gap-2">
                       <Globe className="h-3.5 w-3.5 mt-0.5 text-primary/60 shrink-0" />
                       <div>
                         <div className="font-mono text-[11px] font-bold text-foreground">Web Grounding</div>
                         <div className="font-mono text-[9px] text-muted-foreground mt-0.5 leading-relaxed">
-                          {selectedModel.supportsGrounding ? "Adds :online for live search" : "Not available for this model"}
+                          {selectedModel.supportsGrounding
+                            ? draft.provider === "openai"
+                              ? `Uses ${selectedModel.groundingModelId ?? "search-preview"} for live web access`
+                              : "Adds :online for live search"
+                            : "Not available for this model"}
                         </div>
                       </div>
                     </div>
