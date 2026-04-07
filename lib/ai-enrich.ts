@@ -4,6 +4,25 @@ import { detectContentType } from "@/lib/detect-content-type"
 import { loadAIConfig, getBaseUrl, getProviderHeaders, getModelsForProvider } from "@/lib/ai-settings"
 import type { ContentType } from "@/lib/content-types"
 
+// ========== FIX: 添加重試機制處理 429 rate limit 錯誤 ==========
+const MAX_RETRIES = 3
+const RETRY_DELAY_MS = 2000
+
+async function fetchWithRetry(
+  url: string,
+  options: RequestInit,
+  retries = MAX_RETRIES
+): Promise<Response> {
+  const response = await fetch(url, options)
+  
+  if (response.status === 429 && retries > 0) {
+    await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS))
+    return fetchWithRetry(url, options, retries - 1)
+  }
+  
+  return response
+}
+
 // ── Language detection ────────────────────────────────────────────────────────
 
 const ENGLISH_STOPWORDS = new Set([
@@ -173,22 +192,31 @@ export async function enrichBlockClient(
     }
   }
 
-  const supportsJsonSchema = config.provider === "openrouter" || config.provider === "openai"
-  // gpt-*-search-preview models have known issues with strict json_schema + web_search_options;
-  // fall back to json_object mode (guaranteed valid JSON, no schema enforcement)
-  const useStrictSchema = supportsJsonSchema && !webSearchOptions
+  // ========== FIX: 只對已知支援 json_schema 的模型使用它 ==========
+  // Qwen, DeepSeek, Mistral 等模型不支持 json_schema 或 json_object
+  // 只對 OpenAI 和 Anthropic 的特定模型使用 json_schema
+  // Pollinations.ai 也不支援 json_schema
+  const jsonSchemaSupportedModels = [
+    "openai/gpt-4o",
+    "openai/gpt-4o-mini", 
+    "anthropic/claude-sonnet-4-5",
+    "anthropic/claude-opus-4",
+  ]
+  const isPollinations = config.provider === "pollinations"
+  const useStrictSchema = !isPollinations && jsonSchemaSupportedModels.some(m => model.startsWith(m)) && !webSearchOptions
 
   const groundingNote = shouldGround
     ? `\n\n## Source Citations (grounded search active)
 You have live web access. For this note type, include 1–2 real source citations by name, publication, and year. Do NOT generate URLs — reference by title and author only (e.g. "Per *Science*, 2023, Doe et al."). Only cite sources you have actually retrieved.`
     : ""
 
+  // ========== FIX: 確保 system prompt 包含 "json" 一詞以兼容 Qwen 等模型 ==========
   // Inject an explicit JSON instruction whenever we fall back to json_object mode.
-  // OpenAI requires the word "json" to appear in the messages when using
+  // OpenAI and Qwen require the word "json" to appear in the messages when using
   // response_format: json_object — this covers both non-schema providers AND
   // the grounded OpenAI path where search-preview models can't use json_schema.
   const schemaHint = !useStrictSchema
-    ? `\n\n## Output Format — CRITICAL\nYou MUST respond with a single JSON object (no markdown, no explanation). Schema:\n${JSON.stringify(JSON_SCHEMA.schema, null, 2)}`
+    ? `\n\n## Output Format — CRITICAL\nYou MUST respond with a single valid JSON object (no markdown, no explanation). The word "json" must appear in your response format.\n\nSchema:\n${JSON.stringify(JSON_SCHEMA.schema, null, 2)}`
     : ""
 
   const systemPrompt = SYSTEM_PROMPT + groundingNote + schemaHint
@@ -233,10 +261,12 @@ You have live web access. For this note type, include 1–2 real source citation
   const safeText = text.replace(/</g, '&lt;').replace(/>/g, '&gt;')
   const language = detectScript(text)
   const langDirective = `[RESPOND IN: ${language}]\n`
-  const userMessage = `${langDirective}<note_to_enrich>${safeText}</note_to_enrich>${urlContext}${categoryContext}${forcedTypeContext}${globalContext}`
+  // ========== FIX: 對於不支持 json_schema 的模型，添加 json 提示以滿足 Qwen 等模型的要求 ==========
+  const jsonHint = !useStrictSchema ? "\n\n[IMPORTANT: Return your response as a valid JSON object.]" : ""
+  const userMessage = `${langDirective}${jsonHint}<note_to_enrich>${safeText}</note_to_enrich>${urlContext}${categoryContext}${forcedTypeContext}${globalContext}`
 
   const baseUrl = getBaseUrl(config)
-  const response = await fetch(`${baseUrl}/chat/completions`, {
+  const response = await fetchWithRetry(`${baseUrl}/chat/completions`, {
     method: "POST",
     headers: getProviderHeaders(config),
     body: JSON.stringify({
@@ -245,28 +275,43 @@ You have live web access. For this note type, include 1–2 real source citation
         { role: "system", content: systemPrompt },
         { role: "user",   content: userMessage },
       ],
-      // OpenAI search-preview models reject both response_format AND temperature;
-      // when web_search_options is present, omit both and rely on the schemaHint
-      // in the system prompt to get structured JSON output.
+      // ========== FIX: 只有支援 json_schema 的模型才使用 response_format ==========
+      // Qwen, DeepSeek, Mistral 等免費/開源模型不支持 json_schema 或 json_object
+      // 只對 OpenAI 和 Anthropic 的特定模型使用 response_format
       ...(webSearchOptions === undefined
-        ? {
-            response_format: useStrictSchema
-              ? { type: "json_schema", json_schema: JSON_SCHEMA }
-              : { type: "json_object" },
-            temperature: 0.1,
-          }
+        ? useStrictSchema
+          ? {
+              response_format: { type: "json_schema", json_schema: JSON_SCHEMA },
+              temperature: 0.1,
+            }
+          : { 
+              // No response_format for models that don't support it
+              // Must include "json" in messages for Qwen if we were to use json_object
+              temperature: 0.1,
+            }
         : { web_search_options: webSearchOptions }),
     }),
   })
 
+  // ========== FIX: 添加更好的錯誤處理和日誌 ==========
   if (!response.ok) {
     const err = await response.text()
     throw new Error(`AI enrich error (${config.provider}) ${response.status}: ${err}`)
   }
 
   const data = await response.json()
+  
+  // 記錄完整響應以便診斷問題
+  if (process.env.NODE_ENV === "development") {
+    console.log("[AI Enrich] Response:", JSON.stringify(data, null, 2))
+  }
+  
   const content = data.choices?.[0]?.message?.content
-  if (!content) throw new Error("No content in AI response")
+  if (!content) {
+    const errorMsg = data.error?.message || "Unknown error"
+    const finishReason = data.choices?.[0]?.finish_reason || "unknown"
+    throw new Error(`No content in AI response. Finish reason: ${finishReason}. Error: ${errorMsg}`)
+  }
 
   let result: EnrichResult
   try {

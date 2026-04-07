@@ -52,7 +52,7 @@ export default function Page() {
   const [isIntroOpen, setIsIntroOpen] = useState(false)
   const [showHelpTooltip, setShowHelpTooltip] = useState(false)
   const helpTooltipTimer = useRef<NodeJS.Timeout | null>(null)
-  const { settings, updateSettings, resolvedModelId, currentModel } = useAISettings()
+  const { settings, updateSettings, resolvedModelId, currentModel, models: aiModels, isLoadingModels } = useAISettings()
   const debounceTimers = useRef<Record<string, Record<string, NodeJS.Timeout>>>({})
 
   // ── Undo history ring (max 20 block snapshots per project) ───────────────
@@ -860,6 +860,8 @@ export default function Page() {
         onUpdateAISettings={updateSettings}
         openToSettings={jumpToSettings}
         onSettingsOpened={() => setJumpToSettings(false)}
+        models={aiModels}
+        isLoadingModels={isLoadingModels}
       />
 
       <div className="flex flex-1 flex-col overflow-hidden min-w-0">

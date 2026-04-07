@@ -21,10 +21,10 @@ import {
 } from "lucide-react"
 import {
   AI_PROVIDER_PRESETS,
-  getModelsForProvider,
   getPreset,
   type AISettings,
   type AIProvider,
+  type AIModel,
 } from "@/lib/ai-settings"
 
 interface Project {
@@ -49,6 +49,9 @@ interface ProjectSidebarProps {
   // AI Settings
   aiSettings: AISettings
   onUpdateAISettings: (patch: Partial<AISettings>) => void
+  // ========== FIX: 添加動態模型列表支援 ==========
+  models: AIModel[]
+  isLoadingModels?: boolean
 }
 
 export function ProjectSidebar({
@@ -65,6 +68,8 @@ export function ProjectSidebar({
   onUpdateAISettings,
   openToSettings,
   onSettingsOpened,
+  models,
+  isLoadingModels,
 }: ProjectSidebarProps) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editName, setEditName] = useState("")
@@ -88,6 +93,16 @@ export function ProjectSidebar({
   useEffect(() => {
     if (showSettings) setDraft(aiSettings)
   }, [showSettings])
+
+  // ========== FIX: 當模型列表變化時，確保選中的模型有效 ==========
+  useEffect(() => {
+    if (models.length > 0) {
+      const currentModelExists = models.find(m => m.id === draft.modelId)
+      if (!currentModelExists) {
+        setDraft(d => ({ ...d, modelId: models[0].id }))
+      }
+    }
+  }, [models, draft.modelId])
 
   // Jump straight to settings when requested externally
   useEffect(() => {
@@ -118,7 +133,7 @@ export function ProjectSidebar({
   }
 
   const currentPreset = getPreset(draft.provider)
-  const models = getModelsForProvider(draft.provider)
+  // ========== FIX: 使用從 props 傳入的動態模型列表 ==========
   const selectedModel = models.find(m => m.id === draft.modelId) || models[0] || undefined
 
   return (
@@ -308,11 +323,11 @@ export function ProjectSidebar({
                             <button
                               key={preset.id}
                               onClick={() => {
-                                const newModels = getModelsForProvider(preset.id)
+                                // ========== FIX: 讓父組件的 useAISettings 處理模型列表更新 ==========
                                 setDraft(d => ({
                                   ...d,
                                   provider: preset.id,
-                                  modelId: newModels[0]?.id ?? d.modelId,
+                                  // modelId 會由 useEffect 自動更新為新 provider 的第一個模型
                                   webGrounding: d.webGrounding,
                                   customBaseUrl: "",
                                   // Restore the saved key for this provider if one exists,
